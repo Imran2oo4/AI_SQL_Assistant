@@ -35,15 +35,21 @@ class SQLGenerator:
         
         load_path = self._get_model_path()
         
-        # Load tokenizer and model
+        # Load tokenizer and model with memory optimization
         print(f"Loading model from: {load_path}")
         self.tokenizer = AutoTokenizer.from_pretrained(load_path)
+        
+        # Memory-efficient loading for cloud deployment
         self.model = AutoModelForCausalLM.from_pretrained(
             load_path,
-            torch_dtype=torch.float16 if self.device == "cuda" else torch.float32,
-            device_map="auto" if self.device == "cuda" else None,
+            torch_dtype=torch.float32,  # Use float32 for CPU
+            device_map=None,  # Don't use device_map on CPU
+            low_cpu_mem_usage=True,  # Reduce memory during loading
             trust_remote_code=True
         )
+        
+        # Move to device after loading
+        self.model = self.model.to(self.device)
         
         self.tokenizer.pad_token = self.tokenizer.eos_token
         print("✓ Model loaded!")
