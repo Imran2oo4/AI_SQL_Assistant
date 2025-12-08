@@ -8,8 +8,9 @@ AI-powered Natural Language to SQL conversion using RAG, Fine-tuned LLM, and Gem
 
 ## 🌐 Live Demo
 
-- **🚀 Web App:** [Streamlit App](https://your-app.streamlit.app)
 - **📄 Project Page:** [GitHub Pages](https://moheesh.github.io/Prompt_to_SQL_using_RAG_LLM)
+- **🚀 Web App:** [Streamlit App](https://huggingface.co/spaces/moheesh/sql-learning-assistant)
+
 
 ## ✨ Features
 
