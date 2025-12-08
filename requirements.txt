@@ -1,0 +1,23 @@
+--extra-index-url https://download.pytorch.org/whl/cu130
+
+
+streamlit
+chromadb
+google-generativeai
+python-dotenv
+pandas
+datasets
+transformers
+peft
+accelerate
+bitsandbytes
+torch
+torchvision
+torchaudio
+sentencepiece
+huggingface_hub
+matplotlib
+sentence-transformers
+langchain
+langchain-community
+langchain-chroma

@@ -1,0 +1,800 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SQL Learning Assistant | AI-Powered Natural Language to SQL</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚡</text></svg>">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --primary: #3b82f6;
+            --primary-dark: #2563eb;
+            --secondary: #8b5cf6;
+            --accent: #06b6d4;
+            --success: #22c55e;
+            --bg-dark: #0f172a;
+            --bg-card: #1e293b;
+            --text: #f1f5f9;
+            --text-muted: #94a3b8;
+            --border: #334155;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background: var(--bg-dark);
+            color: var(--text);
+            line-height: 1.6;
+            overflow-x: hidden;
+        }
+
+        /* Animated Background */
+        .bg-animation {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: -1;
+            background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 50%, #0f172a 100%);
+        }
+
+        .bg-animation::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: radial-gradient(circle at 20% 80%, rgba(59, 130, 246, 0.1) 0%, transparent 50%),
+                        radial-gradient(circle at 80% 20%, rgba(139, 92, 246, 0.1) 0%, transparent 50%),
+                        radial-gradient(circle at 40% 40%, rgba(6, 182, 212, 0.05) 0%, transparent 40%);
+        }
+
+        /* Navigation */
+        nav {
+            position: fixed;
+            top: 0;
+            width: 100%;
+            padding: 1rem 2rem;
+            background: rgba(15, 23, 42, 0.8);
+            backdrop-filter: blur(20px);
+            border-bottom: 1px solid var(--border);
+            z-index: 1000;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .logo {
+            font-size: 1.5rem;
+            font-weight: 700;
+            background: linear-gradient(120deg, var(--primary), var(--secondary));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .nav-links {
+            display: flex;
+            gap: 2rem;
+            list-style: none;
+        }
+
+        .nav-links a {
+            color: var(--text-muted);
+            text-decoration: none;
+            font-weight: 500;
+            transition: color 0.3s;
+        }
+
+        .nav-links a:hover {
+            color: var(--primary);
+        }
+
+        .nav-buttons {
+            display: flex;
+            gap: 1rem;
+        }
+
+        /* Buttons */
+        .btn {
+            padding: 0.75rem 1.5rem;
+            border-radius: 10px;
+            font-weight: 600;
+            text-decoration: none;
+            transition: all 0.3s ease;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            cursor: pointer;
+            border: none;
+            font-size: 1rem;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, var(--primary), var(--secondary));
+            color: white;
+            box-shadow: 0 4px 15px rgba(59, 130, 246, 0.3);
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(59, 130, 246, 0.4);
+        }
+
+        .btn-secondary {
+            background: var(--bg-card);
+            color: var(--text);
+            border: 1px solid var(--border);
+        }
+
+        .btn-secondary:hover {
+            border-color: var(--primary);
+            background: rgba(59, 130, 246, 0.1);
+        }
+
+        /* Hero Section */
+        .hero {
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 8rem 2rem 4rem;
+            text-align: center;
+        }
+
+        .hero-content {
+            max-width: 900px;
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 0.5rem 1rem;
+            background: rgba(59, 130, 246, 0.1);
+            border: 1px solid rgba(59, 130, 246, 0.3);
+            border-radius: 50px;
+            font-size: 0.875rem;
+            color: var(--primary);
+            margin-bottom: 1.5rem;
+        }
+
+        .hero h1 {
+            font-size: 4rem;
+            font-weight: 800;
+            line-height: 1.1;
+            margin-bottom: 1.5rem;
+            background: linear-gradient(120deg, #fff, var(--primary), var(--secondary));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .hero p {
+            font-size: 1.25rem;
+            color: var(--text-muted);
+            margin-bottom: 2rem;
+            max-width: 600px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+
+        .hero-buttons {
+            display: flex;
+            gap: 1rem;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+
+        /* Demo Section */
+        .demo-container {
+            margin-top: 4rem;
+            background: var(--bg-card);
+            border-radius: 20px;
+            border: 1px solid var(--border);
+            overflow: hidden;
+            box-shadow: 0 25px 50px rgba(0, 0, 0, 0.3);
+        }
+
+        .demo-header {
+            background: linear-gradient(135deg, var(--bg-dark), var(--bg-card));
+            padding: 1rem 1.5rem;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .demo-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+        }
+
+        .demo-dot.red { background: #ef4444; }
+        .demo-dot.yellow { background: #eab308; }
+        .demo-dot.green { background: #22c55e; }
+
+        .demo-content {
+            padding: 2rem;
+        }
+
+        .demo-input-area {
+            display: flex;
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .demo-input {
+            flex: 1;
+            padding: 1rem 1.5rem;
+            background: var(--bg-dark);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            color: var(--text);
+            font-size: 1rem;
+            font-family: inherit;
+        }
+
+        .demo-input:focus {
+            outline: none;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+        }
+
+        .demo-btn {
+            padding: 1rem 2rem;
+            background: linear-gradient(135deg, var(--primary), var(--secondary));
+            border: none;
+            border-radius: 12px;
+            color: white;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .demo-btn:hover {
+            transform: scale(1.05);
+        }
+
+        .demo-output {
+            background: var(--bg-dark);
+            border-radius: 12px;
+            padding: 1.5rem;
+            border: 1px solid var(--border);
+        }
+
+        .demo-output pre {
+            font-family: 'JetBrains Mono', monospace;
+            color: var(--accent);
+            white-space: pre-wrap;
+            margin: 0;
+        }
+
+        .demo-label {
+            font-size: 0.875rem;
+            color: var(--text-muted);
+            margin-bottom: 0.5rem;
+        }
+
+        /* Sections */
+        section {
+            padding: 6rem 2rem;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .section-header {
+            text-align: center;
+            margin-bottom: 4rem;
+        }
+
+        .section-header h2 {
+            font-size: 2.5rem;
+            font-weight: 700;
+            margin-bottom: 1rem;
+        }
+
+        .section-header p {
+            color: var(--text-muted);
+            font-size: 1.1rem;
+            max-width: 600px;
+            margin: 0 auto;
+        }
+
+        /* Features Grid */
+        .features-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 2rem;
+        }
+
+        .feature-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 2rem;
+            transition: all 0.3s ease;
+        }
+
+        .feature-card:hover {
+            transform: translateY(-5px);
+            border-color: var(--primary);
+            box-shadow: 0 20px 40px rgba(59, 130, 246, 0.1);
+        }
+
+        .feature-icon {
+            width: 60px;
+            height: 60px;
+            background: linear-gradient(135deg, var(--primary), var(--secondary));
+            border-radius: 14px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.5rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .feature-card h3 {
+            font-size: 1.25rem;
+            margin-bottom: 0.75rem;
+        }
+
+        .feature-card p {
+            color: var(--text-muted);
+            font-size: 0.95rem;
+        }
+
+        /* Pipeline Section */
+        .pipeline {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 1rem;
+            align-items: center;
+        }
+
+        .pipeline-step {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 1.5rem 2rem;
+            text-align: center;
+            min-width: 150px;
+            transition: all 0.3s;
+        }
+
+        .pipeline-step:hover {
+            border-color: var(--primary);
+            transform: scale(1.05);
+        }
+
+        .pipeline-step i {
+            font-size: 2rem;
+            margin-bottom: 0.75rem;
+            background: linear-gradient(135deg, var(--primary), var(--secondary));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .pipeline-step h4 {
+            font-size: 0.95rem;
+            margin-bottom: 0.25rem;
+        }
+
+        .pipeline-step p {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+        }
+
+        .pipeline-arrow {
+            font-size: 1.5rem;
+            color: var(--primary);
+        }
+
+        /* Tech Stack */
+        .tech-grid {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 1.5rem;
+        }
+
+        .tech-item {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 1rem 2rem;
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            transition: all 0.3s;
+        }
+
+        .tech-item:hover {
+            border-color: var(--primary);
+        }
+
+        .tech-item img {
+            width: 30px;
+            height: 30px;
+        }
+
+        /* Documentation */
+        .docs-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 1.5rem;
+        }
+
+        .doc-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 1.5rem;
+            text-decoration: none;
+            color: var(--text);
+            transition: all 0.3s;
+            display: block;
+        }
+
+        .doc-card:hover {
+            border-color: var(--primary);
+            transform: translateY(-3px);
+        }
+
+        .doc-card h4 {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .doc-card p {
+            color: var(--text-muted);
+            font-size: 0.9rem;
+        }
+
+        /* Footer */
+        footer {
+            background: var(--bg-card);
+            border-top: 1px solid var(--border);
+            padding: 3rem 2rem;
+            text-align: center;
+        }
+
+        .footer-links {
+            display: flex;
+            justify-content: center;
+            gap: 2rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .footer-links a {
+            color: var(--text-muted);
+            text-decoration: none;
+            font-size: 1.5rem;
+            transition: color 0.3s;
+        }
+
+        .footer-links a:hover {
+            color: var(--primary);
+        }
+
+        .footer-text {
+            color: var(--text-muted);
+            font-size: 0.9rem;
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .hero h1 {
+                font-size: 2.5rem;
+            }
+
+            .nav-links {
+                display: none;
+            }
+
+            .pipeline-arrow {
+                transform: rotate(90deg);
+            }
+
+            .demo-input-area {
+                flex-direction: column;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="bg-animation"></div>
+
+    <!-- Navigation -->
+    <nav>
+        <div class="logo">
+            <span>⚡</span> SQL Assistant
+        </div>
+        <ul class="nav-links">
+            <li><a href="#features">Features</a></li>
+            <li><a href="#pipeline">Pipeline</a></li>
+            <li><a href="#demo">Demo</a></li>
+            <li><a href="#docs">Documentation</a></li>
+        </ul>
+        <div class="nav-buttons">
+            <a href="https://github.com/moheesh/Prompt_to_SQL_using_RAG_LLM" class="btn btn-secondary" target="_blank">
+                <i class="fab fa-github"></i> GitHub
+            </a>
+            <a href="https://your-streamlit-app.streamlit.app" class="btn btn-primary" target="_blank">
+                <i class="fas fa-rocket"></i> Launch App
+            </a>
+        </div>
+    </nav>
+
+    <!-- Hero Section -->
+    <section class="hero">
+        <div class="hero-content">
+            <span class="badge">🎓 INFO7375 Final Project</span>
+            <h1>SQL Learning Assistant</h1>
+            <p>Transform natural language into optimized SQL queries using RAG, Fine-tuned LLMs, and Gemini Enhancement</p>
+            <div class="hero-buttons">
+                <a href="https://your-streamlit-app.streamlit.app" class="btn btn-primary" target="_blank">
+                    <i class="fas fa-play"></i> Try Live Demo
+                </a>
+                <a href="https://github.com/moheesh/Prompt_to_SQL_using_RAG_LLM" class="btn btn-secondary" target="_blank">
+                    <i class="fab fa-github"></i> View Source
+                </a>
+            </div>
+
+            <!-- Interactive Demo -->
+            <div class="demo-container" id="demo">
+                <div class="demo-header">
+                    <span class="demo-dot red"></span>
+                    <span class="demo-dot yellow"></span>
+                    <span class="demo-dot green"></span>
+                    <span style="margin-left: 1rem; color: var(--text-muted);">SQL Learning Assistant</span>
+                </div>
+                <div class="demo-content">
+                    <div class="demo-input-area">
+                        <input type="text" class="demo-input" id="demoInput" placeholder="e.g., Find all employees with salary above 50000" value="Find all employees with salary above 50000">
+                        <button class="demo-btn" onclick="runDemo()">
+                            <i class="fas fa-bolt"></i> Generate
+                        </button>
+                    </div>
+                    <div class="demo-output">
+                        <div class="demo-label">Generated SQL:</div>
+                        <pre id="demoOutput">SELECT *
+FROM employees
+WHERE salary > 50000;</pre>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Features Section -->
+    <section id="features">
+        <div class="section-header">
+            <h2>✨ Key Features</h2>
+            <p>A comprehensive AI pipeline combining multiple technologies for accurate SQL generation</p>
+        </div>
+        <div class="features-grid">
+            <div class="feature-card">
+                <div class="feature-icon">🔍</div>
+                <h3>RAG Retrieval</h3>
+                <p>Retrieves similar SQL examples from a knowledge base of 80,000+ question-SQL pairs using ChromaDB vector search</p>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon">🤖</div>
+                <h3>Fine-tuned LLM</h3>
+                <p>TinyLlama model fine-tuned with LoRA on domain-specific SQL data for accurate query generation</p>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon">✨</div>
+                <h3>Gemini Enhancement</h3>
+                <p>Google's Gemini API refines, validates, and explains generated SQL queries for optimal results</p>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon">📝</div>
+                <h3>Prompt Engineering</h3>
+                <p>Sophisticated prompt construction with context management, edge case handling, and query analysis</p>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon">📦</div>
+                <h3>Synthetic Data</h3>
+                <p>Data augmentation with synonym replacement, structure variation, and quality controls for robust training</p>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon">🎯</div>
+                <h3>Smart Fallbacks</h3>
+                <p>Automatic API key and model fallback system for reliable operation under rate limits</p>
+            </div>
+        </div>
+    </section>
+
+    <!-- Pipeline Section -->
+    <section id="pipeline">
+        <div class="section-header">
+            <h2>🔄 Pipeline Architecture</h2>
+            <p>End-to-end flow from natural language to optimized SQL</p>
+        </div>
+        <div class="pipeline">
+            <div class="pipeline-step">
+                <i class="fas fa-database"></i>
+                <h4>Synthetic Data</h4>
+                <p>Augmentation</p>
+            </div>
+            <span class="pipeline-arrow">→</span>
+            <div class="pipeline-step">
+                <i class="fas fa-graduation-cap"></i>
+                <h4>Fine-tuning</h4>
+                <p>LoRA Training</p>
+            </div>
+            <span class="pipeline-arrow">→</span>
+            <div class="pipeline-step">
+                <i class="fas fa-comment"></i>
+                <h4>User Query</h4>
+                <p>Natural Language</p>
+            </div>
+            <span class="pipeline-arrow">→</span>
+            <div class="pipeline-step">
+                <i class="fas fa-search"></i>
+                <h4>RAG</h4>
+                <p>Similar Examples</p>
+            </div>
+            <span class="pipeline-arrow">→</span>
+            <div class="pipeline-step">
+                <i class="fas fa-cogs"></i>
+                <h4>Prompt</h4>
+                <p>Engineering</p>
+            </div>
+            <span class="pipeline-arrow">→</span>
+            <div class="pipeline-step">
+                <i class="fas fa-robot"></i>
+                <h4>LLM</h4>
+                <p>Generation</p>
+            </div>
+            <span class="pipeline-arrow">→</span>
+            <div class="pipeline-step">
+                <i class="fas fa-magic"></i>
+                <h4>Gemini</h4>
+                <p>Enhancement</p>
+            </div>
+            <span class="pipeline-arrow">→</span>
+            <div class="pipeline-step">
+                <i class="fas fa-check-circle"></i>
+                <h4>Output</h4>
+                <p>Optimized SQL</p>
+            </div>
+        </div>
+    </section>
+
+    <!-- Tech Stack -->
+    <section>
+        <div class="section-header">
+            <h2>🛠️ Tech Stack</h2>
+            <p>Built with modern AI and ML technologies</p>
+        </div>
+        <div class="tech-grid">
+            <div class="tech-item">
+                <i class="fab fa-python" style="font-size: 1.5rem; color: #3776ab;"></i>
+                <span>Python</span>
+            </div>
+            <div class="tech-item">
+                <i class="fas fa-fire" style="font-size: 1.5rem; color: #ee4c2c;"></i>
+                <span>PyTorch</span>
+            </div>
+            <div class="tech-item">
+                <i class="fas fa-face-smile" style="font-size: 1.5rem; color: #ffcc00;"></i>
+                <span>Hugging Face</span>
+            </div>
+            <div class="tech-item">
+                <i class="fas fa-link" style="font-size: 1.5rem; color: #22c55e;"></i>
+                <span>LangChain</span>
+            </div>
+            <div class="tech-item">
+                <i class="fas fa-database" style="font-size: 1.5rem; color: #06b6d4;"></i>
+                <span>ChromaDB</span>
+            </div>
+            <div class="tech-item">
+                <i class="fas fa-gem" style="font-size: 1.5rem; color: #8b5cf6;"></i>
+                <span>Gemini API</span>
+            </div>
+            <div class="tech-item">
+                <i class="fas fa-chart-line" style="font-size: 1.5rem; color: #ef4444;"></i>
+                <span>Streamlit</span>
+            </div>
+        </div>
+    </section>
+
+    <!-- Documentation -->
+    <section id="docs">
+        <div class="section-header">
+            <h2>📚 Documentation</h2>
+            <p>Explore the project components and implementation details</p>
+        </div>
+        <div class="docs-grid">
+            <a href="https://github.com/moheesh/Prompt_to_SQL_using_RAG_LLM#readme" class="doc-card" target="_blank">
+                <h4><i class="fas fa-book"></i> README</h4>
+                <p>Project overview, setup instructions, and quick start guide</p>
+            </a>
+            <a href="https://github.com/moheesh/Prompt_to_SQL_using_RAG_LLM/tree/main/finetuning" class="doc-card" target="_blank">
+                <h4><i class="fas fa-brain"></i> Fine-tuning</h4>
+                <p>Model training, LoRA configuration, and evaluation metrics</p>
+            </a>
+            <a href="https://github.com/moheesh/Prompt_to_SQL_using_RAG_LLM/tree/main/rag" class="doc-card" target="_blank">
+                <h4><i class="fas fa-search"></i> RAG System</h4>
+                <p>Vector store setup, embeddings, and retrieval strategies</p>
+            </a>
+            <a href="https://github.com/moheesh/Prompt_to_SQL_using_RAG_LLM/tree/main/prompts" class="doc-card" target="_blank">
+                <h4><i class="fas fa-terminal"></i> Prompts</h4>
+                <p>Prompt templates, context management, and edge cases</p>
+            </a>
+            <a href="https://github.com/moheesh/Prompt_to_SQL_using_RAG_LLM/tree/main/synthetic" class="doc-card" target="_blank">
+                <h4><i class="fas fa-flask"></i> Synthetic Data</h4>
+                <p>Data augmentation techniques and quality controls</p>
+            </a>
+            <a href="https://github.com/moheesh/Prompt_to_SQL_using_RAG_LLM/tree/main/pipeline" class="doc-card" target="_blank">
+                <h4><i class="fas fa-sitemap"></i> Pipeline</h4>
+                <p>Integrated system architecture and component connections</p>
+            </a>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer>
+        <div class="footer-links">
+            <a href="https://github.com/moheesh/Prompt_to_SQL_using_RAG_LLM" target="_blank"><i class="fab fa-github"></i></a>
+            <a href="https://your-streamlit-app.streamlit.app" target="_blank"><i class="fas fa-external-link-alt"></i></a>
+            <a href="mailto:kavithaarumugam.m@northeastern.edu"><i class="fas fa-envelope"></i></a>
+        </div>
+        <p class="footer-text">
+            Built with ❤️ for INFO7375 | Northeastern University | 2024
+        </p>
+    </footer>
+
+    <!-- Demo Script -->
+    <script>
+        const examples = {
+            "Find all employees with salary above 50000": "SELECT *\nFROM employees\nWHERE salary > 50000;",
+            "Count total orders by customer": "SELECT customer_id, COUNT(*) AS total_orders\nFROM orders\nGROUP BY customer_id\nORDER BY total_orders DESC;",
+            "Show top 5 products by revenue": "SELECT product_name, SUM(quantity * price) AS revenue\nFROM order_items oi\nJOIN products p ON oi.product_id = p.id\nGROUP BY product_name\nORDER BY revenue DESC\nLIMIT 5;",
+            "List customers who placed orders in 2024": "SELECT DISTINCT c.name, c.email\nFROM customers c\nJOIN orders o ON c.id = o.customer_id\nWHERE YEAR(o.order_date) = 2024;",
+            "Calculate average salary by department": "SELECT department, AVG(salary) AS avg_salary\nFROM employees\nGROUP BY department\nORDER BY avg_salary DESC;"
+        };
+
+        function runDemo() {
+            const input = document.getElementById('demoInput').value;
+            const output = document.getElementById('demoOutput');
+            
+            // Show loading
+            output.textContent = "⏳ Processing...";
+            
+            setTimeout(() => {
+                // Check if we have a predefined example
+                if (examples[input]) {
+                    output.textContent = examples[input];
+                } else {
+                    // Generate a generic response
+                    output.textContent = `-- Generated SQL for: "${input}"\nSELECT *\nFROM table_name\nWHERE condition;`;
+                }
+            }, 800);
+        }
+
+        // Add example buttons functionality
+        document.querySelectorAll('.example-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.getElementById('demoInput').value = btn.dataset.query;
+                runDemo();
+            });
+        });
+    </script>
+</body>
+</html>

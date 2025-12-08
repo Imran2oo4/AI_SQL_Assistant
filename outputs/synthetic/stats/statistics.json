@@ -1,0 +1,24 @@
+{
+  "original": {
+    "name": "Original",
+    "samples": 52527,
+    "avg_length": 11.64,
+    "min_length": 3,
+    "max_length": 44,
+    "unique_words": 50846
+  },
+  "synthetic": {
+    "name": "Synthetic",
+    "samples": 142639,
+    "avg_length": 14.75,
+    "min_length": 3,
+    "max_length": 49,
+    "unique_words": 60734
+  },
+  "diversity": {
+    "avg": 0.2832,
+    "min": 0.103,
+    "max": 0.8
+  },
+  "augmentation_factor": 2.72
+}

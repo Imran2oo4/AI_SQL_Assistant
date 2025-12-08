@@ -1,0 +1,7 @@
+{
+  "total_samples": 50,
+  "exact_match_rate": 0.0,
+  "avg_token_accuracy": 0.472115604983252,
+  "avg_keyword_accuracy": 0.9133333333333334,
+  "avg_structure_similarity": 0.9106666666666667
+}
