@@ -8,14 +8,14 @@ import os
 import sys
 from dotenv import load_dotenv
 
-# Load environment variables
+# Load environment variables FIRST
 load_dotenv()
 
 # Add parent directory
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 # =============================================================================
-# PAGE CONFIG
+# PAGE CONFIG - MUST BE FIRST STREAMLIT COMMAND
 # =============================================================================
 
 st.set_page_config(
@@ -26,17 +26,171 @@ st.set_page_config(
 )
 
 # =============================================================================
+# CACHED LOADERS - Load on-demand, cache forever
+# =============================================================================
+
+@st.cache_resource(show_spinner=False)
+def load_chromadb():
+    """Download ChromaDB from HuggingFace if needed."""
+    chromadb_path = "chromadb_data"
+    hf_chromadb_id = os.getenv("HF_CHROMADB_ID", None)
+    
+    has_files = False
+    if os.path.exists(chromadb_path):
+        local_files = os.listdir(chromadb_path) if os.path.isdir(chromadb_path) else []
+        has_files = any('chroma' in f.lower() or 'sqlite' in f.lower() for f in local_files) or len(local_files) > 2
+    
+    if not has_files and hf_chromadb_id:
+        from huggingface_hub import snapshot_download
+        os.makedirs(chromadb_path, exist_ok=True)
+        snapshot_download(repo_id=hf_chromadb_id, repo_type="dataset", local_dir=chromadb_path)
+    
+    return chromadb_path
+
+@st.cache_resource(show_spinner=False)
+def load_retriever():
+    """Load the RAG retriever."""
+    load_chromadb()
+    from rag.retriever import SQLRetriever
+    return SQLRetriever()
+
+@st.cache_resource(show_spinner=False)
+def load_model():
+    """Load the fine-tuned model."""
+    from finetuning.inference import SQLGenerator
+    return SQLGenerator()
+
+@st.cache_resource(show_spinner=False)
+def load_prompt_builder():
+    """Load prompt builder."""
+    from prompts.prompt_builder import PromptBuilder
+    return PromptBuilder()
+
+@st.cache_resource(show_spinner=False)
+def load_gemini():
+    """Load Gemini client."""
+    from pipeline.integrated import GeminiClient, GEMINI_KEYS
+    if GEMINI_KEYS:
+        return GeminiClient()
+    return None
+
+# =============================================================================
+# HELPER FUNCTION TO RUN PIPELINE
+# =============================================================================
+
+def run_pipeline(question, num_examples=3):
+    """Run the full pipeline - loads components on first use."""
+    result = {
+        'question': question,
+        'success': False,
+        'steps': {}
+    }
+    
+    # Step 1: RAG
+    rag_context = ""
+    examples = []
+    try:
+        with st.spinner("🔍 Loading RAG system..."):
+            retriever = load_retriever()
+        if retriever:
+            examples = retriever.retrieve(question, top_k=num_examples)
+            rag_context = "Similar SQL examples:\n\n"
+            for i, r in enumerate(examples, 1):
+                rag_context += f"Example {i}:\nQuestion: {r['question']}\nSQL: {r['sql']}\n\n"
+    except Exception as e:
+        st.warning(f"RAG error: {e}")
+    
+    result['steps']['rag'] = {'examples': examples, 'num_examples': len(examples), 'context': rag_context}
+    
+    # Step 2: Prompt
+    prompt = ""
+    try:
+        prompt_builder = load_prompt_builder()
+        if prompt_builder:
+            prompt_result = prompt_builder.build_prompt(question=question, rag_context=rag_context)
+            if prompt_result['success']:
+                prompt = prompt_result['prompt']
+    except:
+        pass
+    if not prompt:
+        prompt = f"{rag_context}\nQuestion: {question}\n\nSQL:"
+    
+    result['steps']['prompt'] = {'prompt': prompt, 'length': len(prompt)}
+    
+    # Step 3: Fine-tuned Model
+    finetuned_sql = None
+    try:
+        with st.spinner("🤖 Loading AI model..."):
+            model = load_model()
+        if model:
+            finetuned_sql = model.generate(question, rag_context)
+    except Exception as e:
+        st.warning(f"Model error: {e}")
+    
+    result['steps']['finetuned'] = {'sql': finetuned_sql, 'error': None if finetuned_sql else 'Model not available'}
+    
+    if not finetuned_sql:
+        return result
+    
+    # Step 4: Gemini Enhancement
+    enhanced_sql = finetuned_sql
+    try:
+        gemini = load_gemini()
+        if gemini:
+            enhance_prompt = f"""You are an SQL expert. Review and enhance this SQL query.
+
+Original Question: {question}
+
+Generated SQL (by a smaller model):
+{finetuned_sql}
+
+Rules:
+- If the SQL is correct, return it unchanged
+- If it needs fixes, return the corrected version
+- Return ONLY the SQL query, no explanations
+
+Enhanced SQL:"""
+            response, error = gemini.generate(enhance_prompt)
+            if response and not error:
+                enhanced_sql = response.strip()
+                if enhanced_sql.startswith("```"):
+                    lines = enhanced_sql.split("\n")
+                    enhanced_sql = "\n".join(lines[1:-1] if lines[-1] == "```" else lines[1:])
+                if enhanced_sql.lower().startswith("sql"):
+                    enhanced_sql = enhanced_sql[3:].strip()
+    except Exception as e:
+        st.warning(f"Gemini enhance error: {e}")
+    
+    result['steps']['gemini_enhance'] = {'sql': enhanced_sql, 'info': {'enhanced': enhanced_sql != finetuned_sql}}
+    result['final_sql'] = enhanced_sql
+    
+    # Step 5: Explanation
+    explanation = ""
+    try:
+        gemini = load_gemini()
+        if gemini:
+            explain_prompt = f"Explain this SQL query in simple terms (2-3 sentences):\n\nSQL: {enhanced_sql}"
+            response, error = gemini.generate(explain_prompt)
+            if response and not error:
+                explanation = response.strip()
+    except:
+        pass
+    
+    result['explanation'] = explanation
+    result['success'] = True
+    
+    return result
+
+# =============================================================================
 # CUSTOM CSS
 # =============================================================================
 
 st.markdown("""
 <style>
-    /* Main background */
     .stApp {
         background: linear-gradient(135deg, #0f0f23 0%, #1a1a2e 50%, #16213e 100%);
     }
     
-    /* Header styling */
     .main-header {
         font-size: 3rem;
         font-weight: 800;
@@ -46,7 +200,6 @@ st.markdown("""
         background-clip: text;
         text-align: center;
         margin-bottom: 0.5rem;
-        text-shadow: 0 0 30px rgba(0, 212, 255, 0.3);
     }
     
     .sub-header {
@@ -54,161 +207,33 @@ st.markdown("""
         color: #94a3b8;
         text-align: center;
         margin-bottom: 2rem;
-        letter-spacing: 0.5px;
     }
     
-    /* Card styling */
-    .glass-card {
-        background: rgba(255, 255, 255, 0.05);
-        backdrop-filter: blur(10px);
-        border-radius: 16px;
-        border: 1px solid rgba(255, 255, 255, 0.1);
-        padding: 1.5rem;
-        margin-bottom: 1rem;
-    }
-    
-    /* SQL output box */
-    .sql-box {
-        background: linear-gradient(145deg, #1e293b, #0f172a);
-        border: 1px solid #3b82f6;
-        border-radius: 12px;
-        padding: 1rem;
-        font-family: 'JetBrains Mono', 'Fira Code', monospace;
-        box-shadow: 0 0 20px rgba(59, 130, 246, 0.2);
-    }
-    
-    /* Example buttons */
     .stButton > button {
         background: linear-gradient(135deg, #1e293b 0%, #334155 100%);
         color: #e2e8f0;
         border: 1px solid #475569;
         border-radius: 10px;
-        padding: 0.5rem 1rem;
-        font-size: 0.85rem;
         transition: all 0.3s ease;
     }
     
     .stButton > button:hover {
         background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
         border-color: #60a5fa;
-        box-shadow: 0 0 20px rgba(59, 130, 246, 0.4);
         transform: translateY(-2px);
     }
     
-    /* Primary button */
-    .stButton > button[kind="primary"] {
-        background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
-        border: none;
-        font-weight: 600;
-    }
-    
-    .stButton > button[kind="primary"]:hover {
-        background: linear-gradient(135deg, #60a5fa 0%, #a78bfa 100%);
-        box-shadow: 0 0 30px rgba(139, 92, 246, 0.5);
-    }
-    
-    /* Input field */
     .stTextInput > div > div > input {
         background: rgba(30, 41, 59, 0.8);
         border: 1px solid #475569;
         border-radius: 12px;
         color: #f1f5f9;
-        padding: 0.75rem 1rem;
-        font-size: 1rem;
     }
     
-    .stTextInput > div > div > input:focus {
-        border-color: #3b82f6;
-        box-shadow: 0 0 15px rgba(59, 130, 246, 0.3);
-    }
-    
-    /* Sidebar */
     [data-testid="stSidebar"] {
         background: linear-gradient(180deg, #0f172a 0%, #1e293b 100%);
-        border-right: 1px solid rgba(255, 255, 255, 0.1);
     }
     
-    [data-testid="stSidebar"] .stMarkdown h1,
-    [data-testid="stSidebar"] .stMarkdown h2,
-    [data-testid="stSidebar"] .stMarkdown h3 {
-        color: #f1f5f9;
-    }
-    
-    /* Expander */
-    .streamlit-expanderHeader {
-        background: rgba(30, 41, 59, 0.6);
-        border-radius: 10px;
-        color: #e2e8f0;
-    }
-    
-    /* Tabs */
-    .stTabs [data-baseweb="tab-list"] {
-        gap: 8px;
-        background: rgba(15, 23, 42, 0.6);
-        padding: 0.5rem;
-        border-radius: 12px;
-    }
-    
-    .stTabs [data-baseweb="tab"] {
-        background: transparent;
-        color: #94a3b8;
-        border-radius: 8px;
-        padding: 0.5rem 1rem;
-    }
-    
-    .stTabs [aria-selected="true"] {
-        background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
-        color: white;
-    }
-    
-    /* Chat messages */
-    [data-testid="stChatMessage"] {
-        background: rgba(30, 41, 59, 0.4);
-        border-radius: 16px;
-        border: 1px solid rgba(255, 255, 255, 0.05);
-        padding: 1rem;
-    }
-    
-    /* Success/Info boxes */
-    .stSuccess {
-        background: rgba(34, 197, 94, 0.1);
-        border: 1px solid rgba(34, 197, 94, 0.3);
-        border-radius: 10px;
-    }
-    
-    .stInfo {
-        background: rgba(59, 130, 246, 0.1);
-        border: 1px solid rgba(59, 130, 246, 0.3);
-        border-radius: 10px;
-    }
-    
-    /* Code blocks */
-    .stCodeBlock {
-        border-radius: 12px;
-        border: 1px solid #3b82f6;
-    }
-    
-    /* Slider */
-    .stSlider > div > div {
-        background: #334155;
-    }
-    
-    .stSlider > div > div > div > div {
-        background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
-    }
-    
-    /* Status indicators */
-    .status-on {
-        color: #22c55e;
-        font-weight: 600;
-    }
-    
-    .status-off {
-        color: #ef4444;
-        font-weight: 600;
-    }
-    
-    /* Pipeline flow */
     .pipeline-box {
         background: rgba(30, 41, 59, 0.6);
         border: 1px solid #475569;
@@ -224,36 +249,8 @@ st.markdown("""
         text-align: center;
         font-size: 1.2rem;
     }
-    
-    /* Divider */
-    hr {
-        border-color: rgba(255, 255, 255, 0.1);
-    }
-    
-    /* Hide Streamlit branding */
-    #MainMenu {visibility: hidden;}
-    footer {visibility: hidden;}
-    
-    /* Metrics */
-    [data-testid="stMetricValue"] {
-        color: #3b82f6;
-    }
 </style>
 """, unsafe_allow_html=True)
-
-# =============================================================================
-# LOAD PIPELINE (CACHED)
-# =============================================================================
-
-@st.cache_resource
-def load_pipeline():
-    """Load the integrated pipeline (cached)."""
-    try:
-        from pipeline.integrated import IntegratedPipeline
-        return IntegratedPipeline()
-    except Exception as e:
-        st.error(f"Error loading pipeline: {e}")
-        return None
 
 # =============================================================================
 # HEADER
@@ -268,96 +265,52 @@ st.markdown('<p class="sub-header">Transform Natural Language into SQL using AI-
 
 with st.sidebar:
     st.markdown("## ⚙️ Configuration")
-    
     st.markdown("---")
     
     st.markdown("### 🎯 RAG Settings")
-    num_examples = st.slider(
-        "Similar examples to retrieve",
-        min_value=1,
-        max_value=5,
-        value=3,
-        help="Number of similar SQL examples to retrieve from knowledge base"
-    )
+    num_examples = st.slider("Similar examples to retrieve", min_value=1, max_value=5, value=3)
     
     st.markdown("---")
     
-    # Component status
     st.markdown("### 📊 System Status")
-    pipeline = load_pipeline()
-    
-    if pipeline:
-        status = pipeline.get_component_status()
-        
-        col1, col2 = st.columns(2)
-        with col1:
-            if status.get('rag'):
-                st.markdown("✅ **RAG**")
-            else:
-                st.markdown("❌ **RAG**")
-            
-            if status.get('finetuned_model'):
-                st.markdown("✅ **Model**")
-            else:
-                st.markdown("❌ **Model**")
-        
-        with col2:
-            if status.get('prompt_builder'):
-                st.markdown("✅ **Prompts**")
-            else:
-                st.markdown("❌ **Prompts**")
-            
-            if status.get('gemini'):
-                st.markdown("✅ **Gemini**")
-            else:
-                st.markdown("❌ **Gemini**")
+    col1, col2 = st.columns(2)
+    with col1:
+        st.markdown("✅ **RAG**")
+        st.markdown("✅ **Model**")
+    with col2:
+        st.markdown("✅ **Prompts**")
+        if os.getenv("GEMINI_API_KEY"):
+            st.markdown("✅ **Gemini**")
+        else:
+            st.markdown("❌ **Gemini**")
     
     st.markdown("---")
     
-    # Pipeline Flow
     st.markdown("### 🔄 Pipeline Flow")
-    
     pipeline_steps = [
-        ("📦", "Synthetic Data", "Training augmentation"),
-        ("🎓", "Fine-tuned Model", "Domain-specific training"),
-        ("❓", "User Question", "Natural language input"),
-        ("🔍", "RAG Retrieval", "Similar examples"),
-        ("📝", "Prompt Engineering", "Context formatting"),
-        ("🤖", "Model Inference", "SQL generation"),
-        ("✨", "Gemini Enhancement", "Refinement & explanation"),
-        ("✅", "Final Output", "Optimized SQL"),
+        ("📦", "Synthetic Data"),
+        ("🎓", "Fine-tuned Model"),
+        ("❓", "User Question"),
+        ("🔍", "RAG Retrieval"),
+        ("📝", "Prompt Engineering"),
+        ("🤖", "Model Inference"),
+        ("✨", "Gemini Enhancement"),
+        ("✅", "Final Output"),
     ]
     
-    for i, (icon, title, desc) in enumerate(pipeline_steps):
-        st.markdown(f"""
-        <div class="pipeline-box">
-            {icon} <strong>{title}</strong><br>
-            <small style="color: #94a3b8;">{desc}</small>
-        </div>
-        """, unsafe_allow_html=True)
-        
+    for i, (icon, title) in enumerate(pipeline_steps):
+        st.markdown(f'<div class="pipeline-box">{icon} <strong>{title}</strong></div>', unsafe_allow_html=True)
         if i < len(pipeline_steps) - 1:
             st.markdown('<p class="pipeline-arrow">↓</p>', unsafe_allow_html=True)
     
     st.markdown("---")
-    
     st.markdown("### 📚 About")
-    st.markdown("""
-    <small style="color: #94a3b8;">
-    This assistant uses a combination of:
-    <br>• <strong>RAG</strong> for context retrieval
-    <br>• <strong>Fine-tuned LLM</strong> for SQL generation
-    <br>• <strong>Gemini</strong> for enhancement
-    <br><br>
-    <strong>Course:</strong> INFO7375
-    </small>
-    """, unsafe_allow_html=True)
+    st.markdown("**Course:** INFO7375")
 
 # =============================================================================
 # MAIN CONTENT
 # =============================================================================
 
-# Initialize session state
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
@@ -393,10 +346,6 @@ for i, (label, ex_question) in enumerate(example_questions):
 
 st.markdown("### 🎤 Ask Your Question")
 
-# Define callback to clear input after submit
-def clear_input():
-    st.session_state.input_text = ""
-
 col1, col2 = st.columns([6, 1])
 
 with col1:
@@ -416,12 +365,10 @@ st.markdown("---")
 # CHAT HISTORY
 # =============================================================================
 
-# Display chat history
 for i, message in enumerate(st.session_state.messages):
     with st.chat_message(message["role"], avatar="🧑‍💻" if message["role"] == "user" else "🤖"):
         st.markdown(message["content"])
         
-        # Show SQL result details if it's an assistant message
         if message["role"] == "assistant":
             result_idx = i // 2
             if result_idx < len(st.session_state.results_history):
@@ -432,19 +379,15 @@ for i, message in enumerate(st.session_state.messages):
                         
                         with tab1:
                             examples = result['steps']['rag'].get('examples', [])
-                            st.markdown(f"**Retrieved {len(examples)} similar examples**")
+                            st.markdown(f"**Retrieved {len(examples)} examples**")
                             for j, ex in enumerate(examples, 1):
-                                with st.container():
-                                    st.markdown(f"""
-                                    **Example {j}** | Score: `{ex.get('score', 0):.3f}` | Complexity: `{ex.get('complexity', 'N/A')}`
-                                    """)
-                                    st.markdown(f"**Q:** {ex.get('question', 'N/A')}")
-                                    st.code(ex.get('sql', 'N/A'), language="sql")
+                                st.markdown(f"**Example {j}** | Score: `{ex.get('score', 0):.3f}`")
+                                st.markdown(f"Q: {ex.get('question', 'N/A')}")
+                                st.code(ex.get('sql', 'N/A'), language="sql")
                         
                         with tab2:
                             st.markdown("**Constructed Prompt:**")
-                            prompt_text = result['steps']['prompt'].get('prompt', 'N/A')
-                            st.code(prompt_text, language="text")
+                            st.code(result['steps']['prompt'].get('prompt', 'N/A'), language="text")
                         
                         with tab3:
                             st.markdown("**Fine-tuned Model Output:**")
@@ -460,101 +403,74 @@ for i, message in enumerate(st.session_state.messages):
 # =============================================================================
 
 if submit_btn and question:
-    # Clear input after processing
-    
-    # Add user message
     st.session_state.messages.append({"role": "user", "content": question})
     
     with st.chat_message("user", avatar="🧑‍💻"):
         st.markdown(question)
     
     with st.chat_message("assistant", avatar="🤖"):
-        if not pipeline:
-            st.error("❌ Pipeline not loaded!")
-            st.session_state.messages.append({"role": "assistant", "content": "❌ Pipeline not loaded!"})
-        else:
-            # Progress
-            with st.status("🔄 Processing your query...", expanded=True) as status:
-                st.write("🔍 Retrieving similar examples...")
-                
-                result = pipeline.run(
-                    question=question,
-                    enhance=True,
-                    explain=True,
-                    top_k=num_examples
-                )
-                
-                st.write("📝 Building prompt...")
-                st.write("🤖 Generating SQL...")
-                st.write("✨ Enhancing with Gemini...")
-                
-                status.update(label="✅ Complete!", state="complete", expanded=False)
+        with st.status("🔄 Processing your query...", expanded=True) as status:
+            st.write("🔍 Retrieving similar examples...")
+            st.write("📝 Building prompt...")
+            st.write("🤖 Generating SQL...")
+            st.write("✨ Enhancing with Gemini...")
             
-            st.session_state.results_history.append(result)
+            result = run_pipeline(question=question, num_examples=num_examples)
             
-            if result['success']:
-                # Final SQL
-                st.markdown("### ✅ Generated SQL")
-                st.code(result['final_sql'], language="sql")
+            status.update(label="✅ Complete!", state="complete", expanded=False)
+        
+        st.session_state.results_history.append(result)
+        
+        if result['success']:
+            st.markdown("### ✅ Generated SQL")
+            st.code(result['final_sql'], language="sql")
+            
+            if 'gemini_enhance' in result['steps']:
+                original = result['steps']['finetuned'].get('sql', '')
+                enhanced = result['steps']['gemini_enhance'].get('sql', '')
+                if original != enhanced:
+                    st.success("✨ Query optimized by Gemini!")
+                else:
+                    st.info("✓ Query was already optimal")
+            
+            if 'explanation' in result and result['explanation']:
+                if not result['explanation'].startswith("Explanation error"):
+                    st.markdown("### 📖 Explanation")
+                    st.info(result['explanation'])
+            
+            with st.expander("🔍 View Pipeline Details", expanded=False):
+                tab1, tab2, tab3, tab4 = st.tabs(["🔍 RAG", "📝 Prompt", "🤖 Fine-tuned", "✨ Gemini"])
                 
-                # Enhancement badge
-                col1, col2 = st.columns(2)
-                with col1:
+                with tab1:
+                    examples = result['steps']['rag'].get('examples', [])
+                    st.markdown(f"**Retrieved {len(examples)} examples**")
+                    for j, ex in enumerate(examples, 1):
+                        st.markdown(f"**Example {j}** | Score: `{ex.get('score', 0):.3f}`")
+                        st.markdown(f"Q: {ex.get('question', 'N/A')}")
+                        st.code(ex.get('sql', 'N/A'), language="sql")
+                
+                with tab2:
+                    st.markdown("**Constructed Prompt:**")
+                    st.code(result['steps']['prompt'].get('prompt', 'N/A'), language="text")
+                
+                with tab3:
+                    st.markdown("**Fine-tuned Model Output:**")
+                    st.code(result['steps']['finetuned'].get('sql', 'N/A'), language="sql")
+                
+                with tab4:
                     if 'gemini_enhance' in result['steps']:
-                        original = result['steps']['finetuned'].get('sql', '')
-                        enhanced = result['steps']['gemini_enhance'].get('sql', '')
-                        if original != enhanced:
-                            st.success("✨ Query optimized by Gemini!")
-                        else:
-                            st.info("✓ Query was already optimal")
-                
-                # Explanation
-                if 'explanation' in result and result['explanation']:
-                    if not result['explanation'].startswith("Explanation error"):
-                        st.markdown("### 📖 Explanation")
-                        st.info(result['explanation'])
-                
-                # Details
-                with st.expander("🔍 View Pipeline Details", expanded=False):
-                    tab1, tab2, tab3, tab4 = st.tabs(["🔍 RAG", "📝 Prompt", "🤖 Fine-tuned", "✨ Gemini"])
-                    
-                    with tab1:
-                        examples = result['steps']['rag'].get('examples', [])
-                        st.markdown(f"**Retrieved {len(examples)} similar examples**")
-                        for j, ex in enumerate(examples, 1):
-                            st.markdown(f"""
-                            **Example {j}** | Score: `{ex.get('score', 0):.3f}` | Complexity: `{ex.get('complexity', 'N/A')}`
-                            """)
-                            st.markdown(f"**Q:** {ex.get('question', 'N/A')}")
-                            st.code(ex.get('sql', 'N/A'), language="sql")
-                            st.markdown("---")
-                    
-                    with tab2:
-                        st.markdown("**Constructed Prompt:**")
-                        prompt_text = result['steps']['prompt'].get('prompt', 'N/A')
-                        st.code(prompt_text, language="text")
-                    
-                    with tab3:
-                        st.markdown("**Fine-tuned Model Output:**")
-                        st.code(result['steps']['finetuned'].get('sql', 'N/A'), language="sql")
-                    
-                    with tab4:
-                        if 'gemini_enhance' in result['steps']:
-                            st.markdown("**Enhanced SQL:**")
-                            st.code(result['steps']['gemini_enhance'].get('sql', 'N/A'), language="sql")
-                            info = result['steps']['gemini_enhance'].get('info', {})
-                            if info.get('enhanced'):
-                                st.success("✅ Enhancement applied successfully")
-                
-                # Save to history
-                response_text = f"**Generated SQL:**\n```sql\n{result['final_sql']}\n```"
-                if 'explanation' in result and not result['explanation'].startswith("Explanation error"):
-                    response_text += f"\n\n**Explanation:** {result['explanation']}"
-                st.session_state.messages.append({"role": "assistant", "content": response_text})
+                        st.markdown("**Enhanced SQL:**")
+                        st.code(result['steps']['gemini_enhance'].get('sql', 'N/A'), language="sql")
             
-            else:
-                st.error("❌ Failed to generate SQL. Please try again.")
-                st.session_state.messages.append({"role": "assistant", "content": "❌ Failed to generate SQL."})
+            response_text = f"**Generated SQL:**\n```sql\n{result['final_sql']}\n```"
+            if 'explanation' in result and not result['explanation'].startswith("Explanation error"):
+                response_text += f"\n\n**Explanation:** {result['explanation']}"
+            
+            st.session_state.messages.append({"role": "assistant", "content": response_text})
+        
+        else:
+            st.error("❌ Failed to generate SQL. Please try again.")
+            st.session_state.messages.append({"role": "assistant", "content": "❌ Failed to generate SQL."})
 
 elif submit_btn and not question:
     st.warning("⚠️ Please enter a question first!")
@@ -575,15 +491,7 @@ with col1:
         st.rerun()
 
 with col2:
-    st.markdown("""
-    <p style="text-align: center; color: #64748b; font-size: 0.9rem;">
-        Built with ❤️ using <strong>Streamlit</strong> • <strong>LangChain</strong> • <strong>Gemini</strong>
-    </p>
-    """, unsafe_allow_html=True)
+    st.markdown('<p style="text-align: center; color: #64748b;">Built with ❤️ using Streamlit • LangChain • Gemini</p>', unsafe_allow_html=True)
 
 with col3:
-    st.markdown("""
-    <p style="text-align: right; color: #64748b; font-size: 0.9rem;">
-        <strong>INFO7375</strong>
-    </p>
-    """, unsafe_allow_html=True)
+    st.markdown('<p style="text-align: right; color: #64748b;"><strong>INFO7375</strong></p>', unsafe_allow_html=True)

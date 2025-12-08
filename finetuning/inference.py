@@ -51,14 +51,23 @@ class SQLGenerator:
     def _get_model_path(self):
         """Determine where to load model from."""
         
-        # Priority 1: Local checkpoint exists
-        if os.path.exists(LOCAL_MODEL_DIR) and os.listdir(LOCAL_MODEL_DIR):
-            print("📁 Found local model checkpoint")
-            return LOCAL_MODEL_DIR
+        # Check for required model files (not just folder existence)
+        required_files = ['config.json', 'tokenizer.json', 'tokenizer_config.json']
         
-        # Priority 2: HuggingFace Hub
+        # Priority 1: Local checkpoint with actual model files
+        if os.path.exists(LOCAL_MODEL_DIR):
+            local_files = os.listdir(LOCAL_MODEL_DIR) if os.path.isdir(LOCAL_MODEL_DIR) else []
+            has_model_files = any(f in local_files for f in required_files) or any(f.endswith('.safetensors') or f.endswith('.bin') for f in local_files)
+            
+            if has_model_files:
+                print(f"📁 Found local model checkpoint: {LOCAL_MODEL_DIR}")
+                return LOCAL_MODEL_DIR
+            else:
+                print(f"⚠️ Local folder exists but no model files found")
+        
+        # Priority 2: Download from HuggingFace Hub
         if HF_MODEL_ID:
-            print(f"☁️ Loading from HuggingFace: {HF_MODEL_ID}")
+            print(f"☁️ Downloading model from HuggingFace: {HF_MODEL_ID}")
             return HF_MODEL_ID
         
         # Priority 3: Base model fallback

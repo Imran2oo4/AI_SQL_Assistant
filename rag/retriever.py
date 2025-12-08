@@ -9,9 +9,13 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-# LangChain imports
-from langchain_community.vectorstores import Chroma
-from langchain_community.embeddings import HuggingFaceEmbeddings
+# Try new imports first, fall back to old
+try:
+    from langchain_huggingface import HuggingFaceEmbeddings
+    from langchain_chroma import Chroma
+except ImportError:
+    from langchain_community.vectorstores import Chroma
+    from langchain_community.embeddings import HuggingFaceEmbeddings
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -31,15 +35,26 @@ EMBEDDING_MODEL = "all-MiniLM-L6-v2"
 def ensure_chromadb_exists():
     """Ensure ChromaDB data exists - download from HF if needed."""
     
-    # Check if local exists
-    if os.path.exists(LOCAL_CHROMADB_DIR) and os.listdir(LOCAL_CHROMADB_DIR):
-        print(f"📁 Using local ChromaDB: {LOCAL_CHROMADB_DIR}")
-        return LOCAL_CHROMADB_DIR
+    # Check if local has actual ChromaDB files (not just empty folder)
+    if os.path.exists(LOCAL_CHROMADB_DIR):
+        local_files = os.listdir(LOCAL_CHROMADB_DIR) if os.path.isdir(LOCAL_CHROMADB_DIR) else []
+        # ChromaDB creates files like chroma.sqlite3 or folders
+        has_chroma_files = any('chroma' in f.lower() or 'sqlite' in f.lower() for f in local_files) or len(local_files) > 2
+        
+        if has_chroma_files:
+            print(f"📁 Using local ChromaDB: {LOCAL_CHROMADB_DIR}")
+            return LOCAL_CHROMADB_DIR
+        else:
+            print(f"⚠️ ChromaDB folder exists but is empty or incomplete")
     
     # Download from HuggingFace
     if HF_CHROMADB_ID:
         print(f"☁️ Downloading ChromaDB from HuggingFace: {HF_CHROMADB_ID}")
         from huggingface_hub import snapshot_download
+        
+        # Create folder if not exists
+        os.makedirs(LOCAL_CHROMADB_DIR, exist_ok=True)
+        
         snapshot_download(
             repo_id=HF_CHROMADB_ID,
             repo_type="dataset",
@@ -48,8 +63,8 @@ def ensure_chromadb_exists():
         print("✓ ChromaDB downloaded!")
         return LOCAL_CHROMADB_DIR
     
-    # Need to build it
-    print("⚠️ ChromaDB not found. Building from data...")
+    # Need to build it from data
+    print("⚠️ ChromaDB not found and no HF_CHROMADB_ID set. Building from data...")
     from rag.knowledge_base import build_knowledge_base
     build_knowledge_base(data_dir="data", batch_size=500)
     return LOCAL_CHROMADB_DIR
