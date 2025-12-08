@@ -1,6 +1,6 @@
 """
 Streamlit App for SQL Learning Assistant
-Integrates: RAG + Fine-tuned Model + Gemini Enhancement
+Eager Loading - Load everything at startup
 """
 
 import streamlit as st
@@ -26,60 +26,103 @@ st.set_page_config(
 )
 
 # =============================================================================
-# CACHED LOADERS - Load on-demand, cache forever
+# LOAD ALL COMPONENTS AT STARTUP (EAGER LOADING)
 # =============================================================================
 
-@st.cache_resource(show_spinner=False)
-def load_chromadb():
-    """Download ChromaDB from HuggingFace if needed."""
-    chromadb_path = "chromadb_data"
-    hf_chromadb_id = os.getenv("HF_CHROMADB_ID", None)
+@st.cache_resource(show_spinner=True)
+def load_all_components():
+    """Load all components at startup."""
+    components = {
+        'retriever': None,
+        'model': None,
+        'prompt_builder': None,
+        'gemini': None
+    }
     
+    # 1. Load ChromaDB first
+    print("=" * 50)
+    print("LOADING ALL COMPONENTS AT STARTUP")
+    print("=" * 50)
+    
+    chromadb_path = "chromadb_data"
+    hf_chromadb_id = os.getenv("HF_CHROMADB_ID")
+    
+    # Check if ChromaDB has actual files
     has_files = False
     if os.path.exists(chromadb_path):
         local_files = os.listdir(chromadb_path) if os.path.isdir(chromadb_path) else []
         has_files = any('chroma' in f.lower() or 'sqlite' in f.lower() for f in local_files) or len(local_files) > 2
     
     if not has_files and hf_chromadb_id:
+        print(f"☁️ Downloading ChromaDB from HuggingFace: {hf_chromadb_id}")
         from huggingface_hub import snapshot_download
         os.makedirs(chromadb_path, exist_ok=True)
         snapshot_download(repo_id=hf_chromadb_id, repo_type="dataset", local_dir=chromadb_path)
+        print("✓ ChromaDB downloaded!")
     
-    return chromadb_path
+    # 2. Load RAG Retriever
+    try:
+        print("Loading RAG Retriever...")
+        from rag.retriever import SQLRetriever
+        components['retriever'] = SQLRetriever()
+        print("✓ RAG Retriever loaded")
+    except Exception as e:
+        print(f"✗ RAG error: {e}")
+    
+    # 3. Load Fine-tuned Model
+    try:
+        print("Loading Fine-tuned Model...")
+        from finetuning.inference import SQLGenerator
+        components['model'] = SQLGenerator()
+        print("✓ Fine-tuned Model loaded")
+    except Exception as e:
+        print(f"✗ Model error: {e}")
+    
+    # 4. Load Prompt Builder
+    try:
+        print("Loading Prompt Builder...")
+        from prompts.prompt_builder import PromptBuilder
+        components['prompt_builder'] = PromptBuilder()
+        print("✓ Prompt Builder loaded")
+    except Exception as e:
+        print(f"✗ Prompt Builder error: {e}")
+    
+    # 5. Load Gemini
+    try:
+        print("Loading Gemini...")
+        from pipeline.integrated import GeminiClient, GEMINI_KEYS
+        if GEMINI_KEYS:
+            components['gemini'] = GeminiClient()
+            print("✓ Gemini loaded")
+        else:
+            print("⚠️ No Gemini API keys found")
+    except Exception as e:
+        print(f"✗ Gemini error: {e}")
+    
+    print("=" * 50)
+    print("ALL COMPONENTS LOADED")
+    print("=" * 50)
+    
+    return components
 
-@st.cache_resource(show_spinner=False)
-def load_retriever():
-    """Load the RAG retriever."""
-    load_chromadb()
-    from rag.retriever import SQLRetriever
-    return SQLRetriever()
+# =============================================================================
+# LOAD COMPONENTS NOW (AT STARTUP)
+# =============================================================================
 
-@st.cache_resource(show_spinner=False)
-def load_model():
-    """Load the fine-tuned model."""
-    from finetuning.inference import SQLGenerator
-    return SQLGenerator()
+with st.spinner("🚀 Loading SQL Learning Assistant... Please wait..."):
+    COMPONENTS = load_all_components()
 
-@st.cache_resource(show_spinner=False)
-def load_prompt_builder():
-    """Load prompt builder."""
-    from prompts.prompt_builder import PromptBuilder
-    return PromptBuilder()
-
-@st.cache_resource(show_spinner=False)
-def load_gemini():
-    """Load Gemini client."""
-    from pipeline.integrated import GeminiClient, GEMINI_KEYS
-    if GEMINI_KEYS:
-        return GeminiClient()
-    return None
+retriever = COMPONENTS['retriever']
+model = COMPONENTS['model']
+prompt_builder = COMPONENTS['prompt_builder']
+gemini = COMPONENTS['gemini']
 
 # =============================================================================
 # HELPER FUNCTION TO RUN PIPELINE
 # =============================================================================
 
 def run_pipeline(question, num_examples=3):
-    """Run the full pipeline - loads components on first use."""
+    """Run the full pipeline using pre-loaded components."""
     result = {
         'question': question,
         'success': False,
@@ -89,29 +132,26 @@ def run_pipeline(question, num_examples=3):
     # Step 1: RAG
     rag_context = ""
     examples = []
-    try:
-        with st.spinner("🔍 Loading RAG system..."):
-            retriever = load_retriever()
-        if retriever:
+    if retriever:
+        try:
             examples = retriever.retrieve(question, top_k=num_examples)
             rag_context = "Similar SQL examples:\n\n"
             for i, r in enumerate(examples, 1):
                 rag_context += f"Example {i}:\nQuestion: {r['question']}\nSQL: {r['sql']}\n\n"
-    except Exception as e:
-        st.warning(f"RAG error: {e}")
+        except Exception as e:
+            st.warning(f"RAG error: {e}")
     
     result['steps']['rag'] = {'examples': examples, 'num_examples': len(examples), 'context': rag_context}
     
     # Step 2: Prompt
     prompt = ""
-    try:
-        prompt_builder = load_prompt_builder()
-        if prompt_builder:
+    if prompt_builder:
+        try:
             prompt_result = prompt_builder.build_prompt(question=question, rag_context=rag_context)
             if prompt_result['success']:
                 prompt = prompt_result['prompt']
-    except:
-        pass
+        except:
+            pass
     if not prompt:
         prompt = f"{rag_context}\nQuestion: {question}\n\nSQL:"
     
@@ -119,13 +159,11 @@ def run_pipeline(question, num_examples=3):
     
     # Step 3: Fine-tuned Model
     finetuned_sql = None
-    try:
-        with st.spinner("🤖 Loading AI model..."):
-            model = load_model()
-        if model:
+    if model:
+        try:
             finetuned_sql = model.generate(question, rag_context)
-    except Exception as e:
-        st.warning(f"Model error: {e}")
+        except Exception as e:
+            st.warning(f"Model error: {e}")
     
     result['steps']['finetuned'] = {'sql': finetuned_sql, 'error': None if finetuned_sql else 'Model not available'}
     
@@ -134,9 +172,8 @@ def run_pipeline(question, num_examples=3):
     
     # Step 4: Gemini Enhancement
     enhanced_sql = finetuned_sql
-    try:
-        gemini = load_gemini()
-        if gemini:
+    if gemini:
+        try:
             enhance_prompt = f"""You are an SQL expert. Review and enhance this SQL query.
 
 Original Question: {question}
@@ -158,23 +195,22 @@ Enhanced SQL:"""
                     enhanced_sql = "\n".join(lines[1:-1] if lines[-1] == "```" else lines[1:])
                 if enhanced_sql.lower().startswith("sql"):
                     enhanced_sql = enhanced_sql[3:].strip()
-    except Exception as e:
-        st.warning(f"Gemini enhance error: {e}")
+        except Exception as e:
+            st.warning(f"Gemini enhance error: {e}")
     
     result['steps']['gemini_enhance'] = {'sql': enhanced_sql, 'info': {'enhanced': enhanced_sql != finetuned_sql}}
     result['final_sql'] = enhanced_sql
     
     # Step 5: Explanation
     explanation = ""
-    try:
-        gemini = load_gemini()
-        if gemini:
+    if gemini:
+        try:
             explain_prompt = f"Explain this SQL query in simple terms (2-3 sentences):\n\nSQL: {enhanced_sql}"
             response, error = gemini.generate(explain_prompt)
             if response and not error:
                 explanation = response.strip()
-    except:
-        pass
+        except:
+            pass
     
     result['explanation'] = explanation
     result['success'] = True
@@ -275,14 +311,11 @@ with st.sidebar:
     st.markdown("### 📊 System Status")
     col1, col2 = st.columns(2)
     with col1:
-        st.markdown("✅ **RAG**")
-        st.markdown("✅ **Model**")
+        st.markdown("✅ **RAG**" if retriever else "❌ **RAG**")
+        st.markdown("✅ **Model**" if model else "❌ **Model**")
     with col2:
-        st.markdown("✅ **Prompts**")
-        if os.getenv("GEMINI_API_KEY"):
-            st.markdown("✅ **Gemini**")
-        else:
-            st.markdown("❌ **Gemini**")
+        st.markdown("✅ **Prompts**" if prompt_builder else "❌ **Prompts**")
+        st.markdown("✅ **Gemini**" if gemini else "❌ **Gemini**")
     
     st.markdown("---")
     
