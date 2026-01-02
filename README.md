@@ -1,12 +1,3 @@
----
-title: AI SQL Assistant
-emoji: 🤖
-colorFrom: blue
-colorTo: purple
-sdk: docker
-pinned: false
----
-
 # AI-Powered SQL Assistant (AISQL)
 
 Complete Text-to-SQL system with RAG, Groq API, and multi-platform deployment support.
