@@ -144,24 +144,14 @@ async def startup_event():
     print("INITIALIZING TEXT-TO-SQL BACKEND")
     print("=" * 60)
     
-    # 1. Database Manager
-    print("\n[1/6] Initializing Database Manager...")
-    try:
-        db_manager = create_database_manager_from_env()
-        schema = db_manager.get_schema()
-        print(f"✓ Database connected ({len(schema)} tables)")
-    except Exception as e:
-        print(f"✗ Database initialization failed: {e}")
-        raise
+    # 1. Database Manager - Optional (user provides file/connection later)
+    print("\n[1/6] Database Manager - Skipping (user will provide)")
+    print("⚠️  No pre-configured database (users upload files or connect DBs)")
+    db_manager = None
+    validator = None
     
-    # 2. SQL Validator
-    print("\n[2/6] Initializing SQL Validator...")
-    try:
-        validator = create_validator_from_schema(schema)
-        print("✓ SQL Validator ready")
-    except Exception as e:
-        print(f"✗ Validator initialization failed: {e}")
-        raise
+    # 2. SQL Validator - Will be created when database is provided
+    print("\n[2/6] SQL Validator - Will initialize with database")
     
     # 3. RAG Service
     print("\n[3/6] Initializing RAG Service...")
