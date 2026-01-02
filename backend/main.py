@@ -153,16 +153,27 @@ async def startup_event():
     # 2. SQL Validator - Will be created when database is provided
     print("\n[2/6] SQL Validator - Will initialize with database")
     
-    # 3. RAG Service
+    # 3. RAG Service - Make optional for production
     print("\n[3/6] Initializing RAG Service...")
+    rag_service = None
     try:
-        rag_service = create_rag_service(top_k=5)  # Initialize with max 5 examples
-        if rag_service.is_available():
-            print("✓ RAG Service ready")
+        # Set timeout to prevent hanging
+        import signal
+        def timeout_handler(signum, frame):
+            raise TimeoutError("RAG initialization timed out")
+        
+        # Skip RAG in production if ENVIRONMENT=production
+        if os.getenv("ENVIRONMENT") == "production":
+            print("⚠️  RAG Service disabled in production (reduces startup time)")
+            print("   RAG will initialize on first query if needed")
         else:
-            print("⚠️  RAG Service unavailable (will work without examples)")
+            rag_service = create_rag_service(top_k=5)
+            if rag_service.is_available():
+                print("✓ RAG Service ready")
+            else:
+                print("⚠️  RAG Service unavailable (will work without examples)")
     except Exception as e:
-        print(f"⚠️  RAG Service error: {e}")
+        print(f"⚠️  RAG Service skipped: {e}")
         rag_service = None
     
     # 4. Prompt Builder
