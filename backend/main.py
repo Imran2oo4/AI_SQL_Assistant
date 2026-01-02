@@ -36,13 +36,24 @@ app = FastAPI(
     version="2.0.0"
 )
 
-# Add CORS middleware
+# Configure CORS for Render deployment
+FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:8501")
+ALLOWED_ORIGINS = [
+    FRONTEND_URL,
+    "http://localhost:8501",
+    "http://localhost:3000",
+    "https://*.onrender.com",  # Allow all Render subdomains
+]
+
+# Add CORS middleware with Render-compatible settings
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=ALLOWED_ORIGINS,
+    allow_origin_regex=r"https://.*\.onrender\.com",  # Regex for Render URLs
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["*"],
 )
 
 # =============================================================================
@@ -1010,18 +1021,36 @@ async def reset_metrics():
 
 
 # =============================================================================
-# MAIN
+# MAIN - RENDER-COMPATIBLE
 # =============================================================================
 
 if __name__ == "__main__":
     import uvicorn
     
-    port = int(os.getenv("BACKEND_PORT", 8000))
+    # Render provides PORT environment variable
+    port = int(os.getenv("PORT", os.getenv("BACKEND_PORT", 8000)))
+    host = os.getenv("HOST", "0.0.0.0")
     
     print("\n" + "=" * 60)
-    print("BACKEND SERVER STARTING")
+    print("BACKEND SERVER STARTING (RENDER-READY)")
     print("=" * 60)
-    print(f"URL: http://localhost:{port}")
+    print(f"Host: {host}")
+    print(f"Port: {port}")
+    print(f"Environment: {os.getenv('ENVIRONMENT', 'development')}")
+    print(f"Frontend URL: {FRONTEND_URL}")
+    print("=" * 60 + "\n")
+    
+    uvicorn.run(
+        "backend.main:app",
+        host=host,
+        port=port,
+        log_level=os.getenv("LOG_LEVEL", "info").lower(),
+        access_log=True,
+        # Optimize for Render free tier (cold starts)
+        timeout_keep_alive=30,
+        limit_concurrency=50,
+        limit_max_requests=1000,
+    )
     print(f"Docs: http://localhost:{port}/docs")
     print("\nPress CTRL+C to stop")
     print("=" * 60 + "\n")

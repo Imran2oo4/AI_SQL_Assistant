@@ -15,10 +15,17 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # =============================================================================
-# CONFIGURATION
+# CONFIGURATION - RENDER-COMPATIBLE
 # =============================================================================
 
+# Backend URL from environment (Render auto-injects service URLs)
 BACKEND_URL = os.getenv("BACKEND_URL", "http://localhost:8000")
+
+# If BACKEND_URL is just a hostname (from Render), add https://
+if BACKEND_URL and not BACKEND_URL.startswith(('http://', 'https://')):
+    BACKEND_URL = f"https://{BACKEND_URL}"
+
+print(f"🔗 Frontend configured to use backend: {BACKEND_URL}")
 
 # =============================================================================
 # PAGE CONFIG
