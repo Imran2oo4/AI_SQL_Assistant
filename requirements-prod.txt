@@ -1,0 +1,45 @@
+# ============================================================================
+# PRODUCTION REQUIREMENTS (Render Free Tier - 512MB RAM)
+# Excludes heavy ML packages (torch, transformers) that cause OOM
+# ============================================================================
+
+# CORE WEB FRAMEWORK
+fastapi>=0.104.0
+uvicorn[standard]>=0.24.0
+streamlit>=1.28.0
+python-dotenv>=1.0.0
+requests>=2.31.0
+
+# DATABASE & SQL
+sqlparse>=0.4.4
+psycopg2-binary>=2.9.9
+
+# AI/ML - RAG & EMBEDDINGS (lightweight)
+langchain>=0.1.0
+langchain-community>=0.0.10
+langchain-chroma>=0.1.0
+langchain-huggingface>=0.0.1
+sentence-transformers>=2.2.0
+chromadb>=0.4.0
+
+# AI/ML - GROQ (main LLM provider)
+groq>=1.0.0
+
+# UTILITIES
+pandas>=2.1.0
+numpy>=1.24.0
+pydantic>=2.5.0
+
+# TESTING (optional in production)
+# pytest>=7.4.0
+
+# ============================================================================
+# EXCLUDED FROM PRODUCTION (use for local dev only):
+# - torch>=2.1.0 (1GB+ download, requires 2GB+ RAM)
+# - transformers>=4.36.0 (heavy dependency)
+# - accelerate>=0.25.0
+# - peft>=0.7.0
+# - bitsandbytes>=0.41.0
+# 
+# TinyLlama is disabled via ENABLE_TINYLLAMA=false environment variable
+# ============================================================================
