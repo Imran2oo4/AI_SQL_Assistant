@@ -23,10 +23,9 @@ COPY backend/ ./backend/
 COPY frontend/ ./frontend/
 COPY rag/ ./rag/
 COPY pipeline/ ./pipeline/
-COPY chromadb_data/ ./chromadb_data/
 
-# Create logs directory
-RUN mkdir -p logs backend/logs
+# Create directories
+RUN mkdir -p logs backend/logs chromadb_data
 
 # Copy startup script
 COPY start_huggingface.sh .
