@@ -324,8 +324,10 @@ def process_uploaded_file(uploaded_file) -> Dict:
         if df.empty or len(df.columns) == 0:
             return {"success": False, "message": "File has no data or columns"}
         
-        # Create a temporary SQLite database
-        temp_db_path = os.path.join(tempfile.gettempdir(), f"uploaded_data_{hash(uploaded_file.name)}.db")
+        # Create a temporary SQLite database in /tmp which is writable in HF Spaces
+        # Use absolute path that both frontend and backend can access
+        os.makedirs("/tmp", exist_ok=True)
+        temp_db_path = f"/tmp/uploaded_data_{hash(uploaded_file.name)}.db"
         
         # Store data in SQLite
         conn = sqlite3.connect(temp_db_path)
