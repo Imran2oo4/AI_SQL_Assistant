@@ -1,23 +1,51 @@
---extra-index-url https://download.pytorch.org/whl/cu130
+# ============================================================================
+# CORE WEB FRAMEWORK
+# ============================================================================
+fastapi>=0.104.0
+uvicorn[standard]>=0.24.0
+streamlit>=1.28.0
+python-dotenv>=1.0.0
+requests>=2.31.0
 
+# ============================================================================
+# DATABASE & SQL
+# ============================================================================
+sqlparse>=0.4.4
+psycopg2-binary>=2.9.9
 
-streamlit
-chromadb
-google-generativeai
-python-dotenv
-pandas
-datasets
-transformers
-peft
-accelerate
-bitsandbytes
-torch
-torchvision
-torchaudio
-sentencepiece
-huggingface_hub
-matplotlib
-sentence-transformers
-langchain
-langchain-community
-langchain-chroma
+# ============================================================================
+# AI/ML - RAG & EMBEDDINGS
+# ============================================================================
+langchain>=0.1.0
+langchain-community>=0.0.10
+langchain-chroma>=0.1.0
+langchain-huggingface>=0.0.1
+sentence-transformers>=2.2.0
+chromadb>=0.4.0
+
+# ============================================================================
+# AI/ML - LLM (TinyLlama)
+# ============================================================================
+torch>=2.1.0
+transformers>=4.36.0
+accelerate>=0.25.0
+peft>=0.7.0
+bitsandbytes>=0.41.0
+
+# ============================================================================
+# AI/ML - GROQ
+# ============================================================================
+groq>=1.0.0
+
+# ============================================================================
+# UTILITIES
+# ============================================================================
+pandas>=2.1.0
+numpy>=1.24.0
+pydantic>=2.5.0
+
+# ============================================================================
+# TESTING
+# ============================================================================
+pytest>=7.4.0
+pytest-asyncio>=0.21.0

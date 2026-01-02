@@ -9,10 +9,6 @@ import chromadb
 import json
 import re
 from datetime import datetime
-import sys
-
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from rag.embeddings import get_embeddings_batch
 
 # =============================================================================
 # CONFIGURATION
@@ -296,16 +292,13 @@ def build_knowledge_base(data_dir="data", batch_size=500):
         batch_meta = metadatas[i:i + batch_size]
         batch_ids = ids[i:i + batch_size]
         
-        embeddings = get_embeddings_batch(batch_docs)
-        
-        if embeddings and embeddings[0] is not None:
-            collection.add(
-                documents=batch_docs,
-                metadatas=batch_meta,
-                ids=batch_ids,
-                embeddings=embeddings
-            )
-            total_added += len(batch_docs)
+        # ChromaDB will auto-generate embeddings using the collection's embedding function
+        collection.add(
+            documents=batch_docs,
+            metadatas=batch_meta,
+            ids=batch_ids
+        )
+        total_added += len(batch_docs)
         
         progress = min(i + batch_size, len(documents))
         pct = (progress / len(documents)) * 100

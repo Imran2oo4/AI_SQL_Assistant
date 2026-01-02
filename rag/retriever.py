@@ -4,7 +4,6 @@ Loads from: Local ChromaDB OR HuggingFace Hub
 """
 
 import os
-import sys
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -16,8 +15,6 @@ try:
 except ImportError:
     from langchain_community.vectorstores import Chroma
     from langchain_community.embeddings import HuggingFaceEmbeddings
-
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 # =============================================================================
 # CONFIGURATION
@@ -70,22 +67,79 @@ def ensure_chromadb_exists():
     return LOCAL_CHROMADB_DIR
 
 # =============================================================================
-# LANGCHAIN EMBEDDINGS
+# LANGCHAIN EMBEDDINGS WITH CACHING
 # =============================================================================
 
+# Global cache for embeddings model
+_embeddings_cache = None
+
 def get_embeddings():
-    """Get HuggingFace embeddings for LangChain."""
-    return HuggingFaceEmbeddings(
-        model_name=EMBEDDING_MODEL,
-        model_kwargs={'device': 'cpu'},
-        encode_kwargs={'normalize_embeddings': True}
-    )
+    """Get HuggingFace embeddings for LangChain. Uses singleton pattern for caching."""
+    global _embeddings_cache
+    if _embeddings_cache is None:
+        _embeddings_cache = HuggingFaceEmbeddings(
+            model_name=EMBEDDING_MODEL,
+            model_kwargs={'device': 'cpu'},
+            encode_kwargs={'normalize_embeddings': True}
+        )
+    return _embeddings_cache
 
 # =============================================================================
 # RANKING FUNCTIONS
 # =============================================================================
 
 def calculate_relevance_score(result, query):
+    """Calculate enhanced relevance score."""
+    base_score = result.get('score', 0.5)
+    boost = 0.0
+    
+    query_words = set(query.lower().split())
+    question_words = set(result.get('question', '').lower().split())
+    overlap = len(query_words & question_words)
+    if overlap > 0:
+        boost += 0.05 * min(overlap, 5)
+    
+    return min(base_score + boost, 1.0)
+
+def filter_diverse_examples(results, min_diversity_threshold=0.4):
+    """
+    Filter results to ensure diversity - remove examples that are too similar to each other.
+    
+    Args:
+        results: List of result dicts with 'question' field
+        min_diversity_threshold: Minimum word overlap ratio to consider diverse (0-1)
+        
+    Returns:
+        Filtered list with diverse examples
+    """
+    if not results:
+        return results
+    
+    diverse_results = [results[0]]  # Always keep the most relevant
+    
+    for candidate in results[1:]:
+        candidate_words = set(candidate['question'].lower().split())
+        is_diverse = True
+        
+        # Check against all already selected examples
+        for selected in diverse_results:
+            selected_words = set(selected['question'].lower().split())
+            
+            # Calculate Jaccard similarity (intersection / union)
+            if len(candidate_words | selected_words) > 0:
+                similarity = len(candidate_words & selected_words) / len(candidate_words | selected_words)
+                
+                # If too similar, skip this candidate
+                if similarity > (1 - min_diversity_threshold):
+                    is_diverse = False
+                    break
+        
+        if is_diverse:
+            diverse_results.append(candidate)
+    
+    return diverse_results
+
+def calculate_relevance_score_old(result, query):
     """Calculate enhanced relevance score."""
     base_score = result.get('score', 0.5)
     boost = 0.0
@@ -136,6 +190,7 @@ class SQLRetriever:
         
         # Ensure ChromaDB exists
         chromadb_path = ensure_chromadb_exists()
+        self.persist_dir = chromadb_path  # Store for later use
         
         # Load embeddings
         self.embeddings = get_embeddings()
@@ -181,6 +236,9 @@ class SQLRetriever:
         if rerank:
             formatted = rerank_results(formatted, query)
         
+        # Apply diversity filter to ensure unique examples (less aggressive for more results)
+        formatted = filter_diverse_examples(formatted, min_diversity_threshold=0.3)
+        
         return formatted[:top_k]
     
     def retrieve_as_context(self, query, top_k=5):
@@ -198,6 +256,64 @@ class SQLRetriever:
         
         return context
     
+    def add_example(self, example: dict):
+        """
+        Add a new example to ChromaDB (feedback loop).
+        
+        Args:
+            example: Dict with 'question', 'sql', 'schema'
+        """
+        try:
+            from langchain.schema import Document
+        except ImportError:
+            from langchain_core.documents import Document
+        
+        doc = Document(
+            page_content=example['question'],
+            metadata={
+                'sql': example['sql'],
+                'schema': example.get('schema', ''),
+                'source': 'user_feedback',
+                'complexity': self._detect_complexity(example['sql'])
+            }
+        )
+        
+        self.vectorstore.add_documents([doc])
+        self.doc_count += 1
+        print(f"✓ Added new example to RAG (total: {self.doc_count})")
+    
+    def clear_all_examples(self):
+        """
+        Clear all examples from ChromaDB.
+        Useful when switching to a new database to avoid confusion with old examples.
+        """
+        try:
+            # Delete the collection and recreate it
+            self.vectorstore._client.delete_collection(COLLECTION_NAME)
+            print(f"🗑️  Cleared all RAG examples from ChromaDB")
+            
+            # Reinitialize the vectorstore
+            embeddings = HuggingFaceEmbeddings(model_name=EMBEDDING_MODEL)
+            self.vectorstore = Chroma(
+                collection_name=COLLECTION_NAME,
+                embedding_function=embeddings,
+                persist_directory=self.persist_dir
+            )
+            self.doc_count = 0
+            print(f"✓ RAG database reinitialized")
+        except Exception as e:
+            print(f"⚠️  Failed to clear RAG examples: {e}")
+    
+    def _detect_complexity(self, sql: str) -> str:
+        """Detect SQL complexity level."""
+        sql_upper = sql.upper()
+        if 'JOIN' in sql_upper or 'UNION' in sql_upper or 'SUBQUERY' in sql_upper:
+            return 'complex'
+        elif 'GROUP BY' in sql_upper or 'HAVING' in sql_upper:
+            return 'aggregation'
+        else:
+            return 'simple'
+    
     def get_stats(self):
         """Get retriever statistics."""
         return {
@@ -207,28 +323,4 @@ class SQLRetriever:
         }
 
 # =============================================================================
-# TEST
-# =============================================================================
-
-def test_retriever():
-    """Test retriever."""
-    print("=" * 60)
-    print("TESTING SQL RETRIEVER")
-    print("=" * 60)
-    
-    retriever = SQLRetriever()
-    
-    query = "Find all employees with salary above 50000"
-    results = retriever.retrieve(query, top_k=3)
-    
-    print(f"\nQuery: {query}\n")
-    for i, r in enumerate(results, 1):
-        print(f"Result {i}: (score: {r['score']:.3f})")
-        print(f"  Q: {r['question'][:60]}...")
-        print(f"  SQL: {r['sql'][:60]}...")
-        print()
-    
-    print("✓ Test complete")
-
-if __name__ == "__main__":
-    test_retriever()
+# Production retriever - no test code in main module

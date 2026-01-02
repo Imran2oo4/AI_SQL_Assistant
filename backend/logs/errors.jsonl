@@ -1,0 +1,3 @@
+{"timestamp": "2025-12-13T21:04:35.163921", "error_type": "unexpected_error", "message": "TinyLlama generator not initialized", "context": {"question": "show me all customers who made orders in last 30 days\n"}}
+{"timestamp": "2025-12-13T21:04:49.986962", "error_type": "unexpected_error", "message": "TinyLlama generator not initialized", "context": {"question": "show me all customers who made orders in last 30 days\n"}}
+{"timestamp": "2025-12-13T21:08:47.305757", "error_type": "unexpected_error", "message": "TinyLlama generator not initialized", "context": {"question": "show me all customers who made orders in last 30days\n"}}
