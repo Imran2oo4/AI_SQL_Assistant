@@ -375,11 +375,17 @@ def call_upload_file_api(db_path: str, table_name: str) -> Dict:
                 "schema": data.get("schema")
             }
         else:
-            return {"success": False, "message": "Failed to register file with backend"}
+            # Capture detailed error information
+            error_detail = f"Status {response.status_code}"
+            try:
+                error_detail += f": {response.json()}"
+            except:
+                error_detail += f": {response.text}"
+            return {"success": False, "error": error_detail}
     except requests.exceptions.ConnectionError:
-        return {"success": False, "message": "Cannot connect to backend server. Is it running?"}
+        return {"success": False, "error": "Cannot connect to backend server. Is it running?"}
     except Exception as e:
-        return {"success": False, "message": f"Request failed: {str(e)}"}
+        return {"success": False, "error": f"Request failed: {str(e)}"}
 
 
 # =============================================================================
