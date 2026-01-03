@@ -137,95 +137,39 @@ performance_monitor = get_performance_monitor() if PERFORMANCE_MONITORING_AVAILA
 
 @app.on_event("startup")
 async def startup_event():
-    """Initialize all services on startup."""
+    """Minimal startup - defer all initialization to first use."""
+    print("=" * 60)
+    print("TEXT-TO-SQL BACKEND READY (Render Production)")
+    print("=" * 60)
+    print("✓ All services will initialize on first request")
+    print("✓ This ensures fast port binding for Render")
+    print("=" * 60)
+
+
+def _lazy_init_services():
+    """Lazy initialize services on first use."""
     global db_manager, validator, rag_service, prompt_builder, groq_service, logging_service
     
-    print("=" * 60)
-    print("INITIALIZING TEXT-TO-SQL BACKEND")
-    print("=" * 60)
+    # Only initialize if not already done
+    if prompt_builder is None:
+        print("[Lazy Init] Initializing Prompt Builder...")
+        try:
+            prompt_builder = create_prompt_builder()
+        except Exception as e:
+            print(f"⚠️ Prompt Builder failed: {e}")
     
-    # 1. Database Manager - Optional (user provides file/connection later)
-    print("\n[1/6] Database Manager - Skipping (user will provide)")
-    print("⚠️  No pre-configured database (users upload files or connect DBs)")
-    db_manager = None
-    validator = None
+    if groq_service is None:
+        print("[Lazy Init] Initializing Groq Service...")
+        try:
+            groq_service = create_groq_service()
+        except Exception as e:
+            print(f"⚠️ Groq Service failed: {e}")
     
-    # 2. SQL Validator - Will be created when database is provided
-    print("\n[2/6] SQL Validator - Will initialize with database")
-    
-    # 3. RAG Service - Make optional for production
-    print("\n[3/6] Initializing RAG Service...")
-    rag_service = None
-    try:
-        # Set timeout to prevent hanging
-        import signal
-        def timeout_handler(signum, frame):
-            raise TimeoutError("RAG initialization timed out")
-        
-        # Skip RAG in production if ENVIRONMENT=production
-        if os.getenv("ENVIRONMENT") == "production":
-            print("⚠️  RAG Service disabled in production (reduces startup time)")
-            print("   RAG will initialize on first query if needed")
-        else:
-            rag_service = create_rag_service(top_k=5)
-            if rag_service.is_available():
-                print("✓ RAG Service ready")
-            else:
-                print("⚠️  RAG Service unavailable (will work without examples)")
-    except Exception as e:
-        print(f"⚠️  RAG Service skipped: {e}")
-        rag_service = None
-    
-    # 4. Prompt Builder
-    print("\n[4/6] Initializing Prompt Builder...")
-    try:
-        prompt_builder = create_prompt_builder()
-        print("✓ Prompt Builder ready")
-    except Exception as e:
-        print(f"✗ Prompt Builder initialization failed: {e}")
-        raise
-    
-    # 5. Groq-only mode (TinyLlama removed)
-    print("\n[5/6] Groq-only mode enabled")
-    print("✓ Ready to use Groq API")
-    
-    # 6. Groq Service
-    print("\n[6/6] Initializing Groq Service...")
-    try:
-        groq_service = create_groq_service()
-        if groq_service.is_available():
-            print("✓ Groq Service ready")
-        else:
-            print("⚠️  Groq Service unavailable (users will provide API key)")
-    except Exception as e:
-        print(f"⚠️  Groq Service not initialized (users will provide their own API keys)")
-        print(f"   This is expected - users should enter their API key in the frontend.")
-        groq_service = None
-    
-    # 7. Logging Service
-    print("\nInitializing Logging Service...")
-    try:
-        logging_service = create_logging_service()
-        print("✓ Logging Service ready")
-    except Exception as e:
-        print(f"⚠️  Logging Service error: {e}")
-        logging_service = None
-    
-    print("\n" + "=" * 60)
-    print("BACKEND READY")
-    print("=" * 60)
-    
-    # Display performance optimizations status
-    if PERFORMANCE_MONITORING_AVAILABLE:
-        print("\n✅ PERFORMANCE OPTIMIZATIONS ACTIVE:")
-        print("   • Connection Pooling (5-10x faster queries)")
-        print("   • Query Result Caching (20-50x faster repeated queries)")
-        print("   • Async Processing (10x higher concurrency)")
-        print("   • Background Tasks (non-blocking logging)")
-        print("   • Performance Monitoring (/metrics endpoint)")
-    else:
-        print("\n⚠️  Performance optimizations not loaded")
-        print("   Install: backend/core/connection_pool.py, query_cache.py, etc.")
+    if logging_service is None:
+        try:
+            logging_service = create_logging_service()
+        except Exception as e:
+            logging_service = None
 
 
 # =============================================================================
@@ -270,6 +214,9 @@ async def ask_question(request: AskRequest, background_tasks: BackgroundTasks):
     7. Log everything (in background)
     8. Save to RAG (in background)
     """
+    # Lazy initialize services on first request
+    _lazy_init_services()
+    
     start_time = time.time()
     
     # Track request performance
