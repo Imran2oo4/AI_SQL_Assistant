@@ -12,12 +12,27 @@ import time
 import os
 
 from backend.core import DatabaseManager, create_database_manager_from_env, SQLValidator, create_validator_from_schema
-from backend.services import (
-    create_rag_service,
-    create_prompt_builder,
-    create_groq_service,
-    create_logging_service
-)
+
+# Lazy imports - don't load heavy services at module import time
+create_rag_service = None
+create_prompt_builder = None
+create_groq_service = None
+create_logging_service = None
+
+def _import_services():
+    """Lazy import services only when needed."""
+    global create_rag_service, create_prompt_builder, create_groq_service, create_logging_service
+    if create_rag_service is None:
+        from backend.services import (
+            create_rag_service as crs,
+            create_prompt_builder as cpb,
+            create_groq_service as cgs,
+            create_logging_service as cls
+        )
+        create_rag_service = crs
+        create_prompt_builder = cpb
+        create_groq_service = cgs
+        create_logging_service = cls
 
 # Import performance optimizations
 try:
@@ -149,6 +164,9 @@ async def startup_event():
 def _lazy_init_services():
     """Lazy initialize services on first use."""
     global db_manager, validator, rag_service, prompt_builder, groq_service, logging_service
+    
+    # Import services first
+    _import_services()
     
     # Only initialize if not already done
     if prompt_builder is None:
