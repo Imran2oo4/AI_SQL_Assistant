@@ -377,15 +377,21 @@ def call_upload_file_api(db_path: str, table_name: str) -> Dict:
         if response.status_code == 200:
             try:
                 data = response.json()
+                print(f"📦 Backend response: {data}")
                 # Validate response has required fields
                 if "success" not in data or "message" not in data:
+                    print(f"⚠️ Invalid response format: {data}")
                     return {"success": False, "error": f"Invalid response format: {data}"}
-                return {
+                result = {
                     "success": data["success"],
                     "message": data["message"],
                     "schema": data.get("schema")
                 }
+                print(f"📤 Returning to UI: {result}")
+                return result
             except Exception as parse_error:
+                print(f"❌ Parse error: {str(parse_error)}")
+                print(f"❌ Response text: {response.text[:200]}")
                 return {"success": False, "error": f"Failed to parse response: {str(parse_error)}. Response text: {response.text[:200]}"}
         else:
             # Capture detailed error information
@@ -953,7 +959,7 @@ def render_sidebar():
                                         st.balloons()
                                         st.rerun()
                                     else:
-                                        st.error(f"❌ Backend error: {backend_result.get('error', 'Unknown error')}")
+                                        st.error(f"❌ Backend error: {backend_result.get('error') or backend_result.get('message', 'Unknown error')}")
                                 else:
                                     st.error(f"❌ Processing error: {result.get('error', 'Unknown error')}")
                             except Exception as e:

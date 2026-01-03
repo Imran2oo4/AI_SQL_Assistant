@@ -756,6 +756,8 @@ async def upload_file(request: FileUploadRequest):
     """
     global session_db_manager
     
+    print(f"📥 /upload-file called with db_path={request.db_path}")
+    
     try:
         # Create DatabaseManager pointing to the uploaded file's database
         file_db_manager = DatabaseManager(
@@ -765,13 +767,16 @@ async def upload_file(request: FileUploadRequest):
         
         # Test connection and fetch schema
         schema = file_db_manager.get_schema()
+        print(f"📊 Schema fetched: {len(schema) if schema else 0} tables")
         
         if not schema:
-            return FileUploadResponse(
+            response = FileUploadResponse(
                 success=False,
                 message="Could not read schema from uploaded file",
                 schema=None
             )
+            print(f"❌ Returning: {response.dict()}")
+            return response
         
         # Store the file database manager for this session
         session_db_manager = file_db_manager
@@ -787,18 +792,21 @@ async def upload_file(request: FileUploadRequest):
             generated_count = rag_service.generate_initial_examples(schema, str(detailed_schema))
             print(f"✨ Generated {generated_count} initial RAG examples for uploaded database")
         
-        return FileUploadResponse(
+        response = FileUploadResponse(
             success=True,
             message=f"Successfully loaded file with {len(schema)} table(s)",
             schema=schema
         )
         
     except Exception as e:
-        return FileUploadResponse(
+        response = FileUploadResponse(
             success=False,
             message=f"Failed to load file: {str(e)}",
             schema=None
         )
+        print(f"❌ Exception: {str(e)}")
+        print(f"❌ Returning error: {response.dict()}")
+        return response
 
 
 @app.get("/schema", response_model=SchemaResponse)
