@@ -375,12 +375,18 @@ def call_upload_file_api(db_path: str, table_name: str) -> Dict:
         )
         
         if response.status_code == 200:
-            data = response.json()
-            return {
-                "success": data["success"],
-                "message": data["message"],
-                "schema": data.get("schema")
-            }
+            try:
+                data = response.json()
+                # Validate response has required fields
+                if "success" not in data or "message" not in data:
+                    return {"success": False, "error": f"Invalid response format: {data}"}
+                return {
+                    "success": data["success"],
+                    "message": data["message"],
+                    "schema": data.get("schema")
+                }
+            except Exception as parse_error:
+                return {"success": False, "error": f"Failed to parse response: {str(parse_error)}. Response text: {response.text[:200]}"}
         else:
             # Capture detailed error information
             error_detail = f"Status {response.status_code}"
