@@ -103,7 +103,8 @@ class FeedbackRequest(BaseModel):
 
 
 class FileUploadRequest(BaseModel):
-    db_path: str
+    file_content: str  # Base64 encoded SQLite database
+    file_name: str
     db_type: str = "sqlite"
 
 
@@ -752,17 +753,30 @@ async def connect_database(request: DatabaseConnectRequest):
 async def upload_file(request: FileUploadRequest):
     """
     Register an uploaded file's SQLite database for querying.
-    The file has already been converted to SQLite by the frontend.
+    The file content is sent as base64 encoded string.
     """
     global session_db_manager
     
-    print(f"📥 /upload-file called with db_path={request.db_path}")
+    print(f"📥 /upload-file called with file_name={request.file_name}")
     
     try:
+        import base64
+        import tempfile
+        import os
+        
+        # Decode base64 content and save to temp file
+        db_content = base64.b64decode(request.file_content)
+        temp_db_path = f"/tmp/{request.file_name}"
+        
+        with open(temp_db_path, 'wb') as f:
+            f.write(db_content)
+        
+        print(f"💾 Saved database to {temp_db_path}")
+        
         # Create DatabaseManager pointing to the uploaded file's database
         file_db_manager = DatabaseManager(
             db_type="sqlite",
-            db_path=request.db_path
+            db_path=temp_db_path
         )
         
         # Test connection and fetch schema
@@ -797,6 +811,8 @@ async def upload_file(request: FileUploadRequest):
             message=f"Successfully loaded file with {len(schema)} table(s)",
             schema=schema
         )
+        print(f"✅ Returning success: {response.dict()}")
+        return response
         
     except Exception as e:
         response = FileUploadResponse(

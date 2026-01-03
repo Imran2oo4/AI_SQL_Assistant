@@ -365,13 +365,22 @@ def process_uploaded_file(uploaded_file) -> Dict:
 def call_upload_file_api(db_path: str, table_name: str) -> Dict:
     """Call the backend to register the uploaded file database."""
     try:
+        import base64
+        
+        # Read the SQLite file and encode as base64
+        with open(db_path, 'rb') as f:
+            db_content = base64.b64encode(f.read()).decode('utf-8')
+        
+        file_name = os.path.basename(db_path)
+        
         response = requests.post(
             f"{BACKEND_URL}/upload-file",
             json={
-                "db_path": db_path,
+                "file_content": db_content,
+                "file_name": file_name,
                 "db_type": "sqlite"
             },
-            timeout=15
+            timeout=30  # Increased timeout for large files
         )
         
         if response.status_code == 200:
@@ -382,11 +391,19 @@ def call_upload_file_api(db_path: str, table_name: str) -> Dict:
                 if "success" not in data or "message" not in data:
                     print(f"⚠️ Invalid response format: {data}")
                     return {"success": False, "error": f"Invalid response format: {data}"}
-                result = {
-                    "success": data["success"],
-                    "message": data["message"],
-                    "schema": data.get("schema")
-                }
+                
+                # Normalize: success=True → message, success=False → error
+                if data["success"]:
+                    result = {
+                        "success": True,
+                        "message": data["message"],
+                        "schema": data.get("schema")
+                    }
+                else:
+                    result = {
+                        "success": False,
+                        "error": data["message"]  # Convert message to error for failures
+                    }
                 print(f"📤 Returning to UI: {result}")
                 return result
             except Exception as parse_error:
@@ -959,7 +976,7 @@ def render_sidebar():
                                         st.balloons()
                                         st.rerun()
                                     else:
-                                        st.error(f"❌ Backend error: {backend_result.get('error') or backend_result.get('message', 'Unknown error')}")
+                                        st.error(f"❌ Backend error: {backend_result.get('error', 'Unknown error')}")
                                 else:
                                     st.error(f"❌ Processing error: {result.get('error', 'Unknown error')}")
                             except Exception as e:
