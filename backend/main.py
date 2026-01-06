@@ -221,24 +221,26 @@ async def health():
 async def ask_question(request: AskRequest, background_tasks: BackgroundTasks):
     """
     Main endpoint: Convert natural language question to SQL and execute it.
-    NOW WITH: Performance monitoring, background tasks, async processing!
-    
-    Pipeline:
-    1. Retrieve similar examples from RAG
-    2. Build prompt with schema + examples
-    3. Generate SQL with Groq (or TinyLlama)
-    4. Validate SQL for safety
-    5. Execute on database
-    6. Generate explanation
-    7. Log everything (in background)
-    8. Save to RAG (in background)
-    """
-    # Lazy initialize services on first request
-    _lazy_init_services()
-    
-    start_time = time.time()
-    
-    # Track request performance
+@app.head("/")
+async def root():
+    """Health check endpoint."""
+    return {
+        "status": "online",
+        "version": "2.0.0",
+        "services": {
+            "database": db_manager is not None,
+            "validator": validator is not None,
+            "rag": rag_service is not None and rag_service.is_available(),
+            "groq": groq_service is not None and groq_service.is_available(),
+            "logging": logging_service is not None
+        }
+    }
+
+
+@app.get("/health")
+@app.head("/health")
+async def health():
+    """Simple health check for Docker and uptime monitoring
     if PERFORMANCE_MONITORING_AVAILABLE:
         track_context = performance_monitor.track_request()
         track_context.__enter__()
