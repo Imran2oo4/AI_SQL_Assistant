@@ -1,0 +1,50 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    container_name: aisql-backend
+    ports:
+      - "8000:8000"
+    environment:
+      - GROQ_ONLY=true
+      - GROQ_API_KEY=${GROQ_API_KEY:-}
+    volumes:
+      - ./chromadb_data:/app/chromadb_data
+      - ./logs:/app/logs
+      - ./backend/logs:/app/backend/logs
+    restart: unless-stopped
+    networks:
+      - aisql-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    container_name: aisql-frontend
+    ports:
+      - "8501:8501"
+    environment:
+      - BACKEND_URL=http://backend:8000
+    depends_on:
+      - backend
+    volumes:
+      - ./logs:/app/logs
+    restart: unless-stopped
+    networks:
+      - aisql-network
+
+networks:
+  aisql-network:
+    driver: bridge
+
+volumes:
+  chromadb_data:
+  logs:
