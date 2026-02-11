@@ -1,6 +1,6 @@
 # AI-Powered SQL Assistant (AISQL)
 
-Complete Text-to-SQL system with RAG, Groq API, and multi-platform deployment support.
+Complete Text-to-SQL system with RAG, Groq API, and multi-platform deployment support. https://aisql-frontend.onrender.com/
 
 ---
 
